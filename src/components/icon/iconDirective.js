@@ -148,35 +148,41 @@ function mdIconDirective($mdIcon, $mdTheming, $mdAria, $interpolate ) {
       svgSrc  : '@mdSvgSrc'
     },
     restrict: 'E',
-    transclude:true,
-    template: getTemplate,
-    link: postLink
+    compile : function compile(element, attr) {
+      var isEmptyAttr  = function(key) { return angular.isDefined(attr[key]) ? attr[key].length == 0 : false    },
+          hasAttrValue = function(key) { return attr[key] && attr[key].length > 0;     },
+          attrValue    = function(key) { return hasAttrValue(key) ? attr[key] : '' };
+
+      var styles = attrValue('class').trim();
+      var usingSVG = hasAttrValue('mdSvgIcon') ||  hasAttrValue('mdSvgSrc') || isEmptyAttr('mdFontIcon');
+
+      if ( !usingSVG ) {
+        if ( hasAttrValue('mdFontIcon') ) {
+
+          // If using the deprecated md-font-icon API
+          element.attr( 'class', "md-font" + " " + attrValue('mdFontIcon') + " " + styles );
+          element.attr( 'ng-class', 'fontIcon');
+
+
+        } else {
+          element.html('<span>' + element.html() + '</span>');
+          // If available, lookup the fontSet style and add to the list of classnames
+          // If using ligature-based font-icons, transpose the ligature or NRCs
+
+          var material = $mdIcon.fontSet(attrValue('mdFontSet'));
+
+          if ( styles.indexOf(material) == -1 ) {
+            // NOTE: Material Design icons expect classnames like
+            // `.material-icons.md-48` instead of `.material-icons .md-48`
+
+            element.attr('class', material + " " + styles );
+          }
+        }
+      }
+
+      return postLink;
+    }
   };
-
-  function getTemplate(element, attr) {
-    var isEmptyAttr  = function(key) { return angular.isDefined(attr[key]) ? attr[key].length == 0 : false    },
-        hasAttrValue = function(key) { return attr[key] && attr[key].length > 0;     },
-        attrValue    = function(key) { return hasAttrValue(key) ? attr[key] : '' };
-
-    // If using the deprecated md-font-icon API
-    // If using ligature-based font-icons, transclude the ligature or NRCs
-
-    var tmplFontIcon = '<span class="md-font {{classNames}}" ng-class="fontIcon"></span>';
-    var tmplFontSet  = '<span class="{{classNames}}" ng-transclude></span>';
-
-    var tmpl = hasAttrValue('mdSvgIcon')     ? ''           :
-               hasAttrValue('mdSvgSrc')      ? ''           :
-               isEmptyAttr('mdFontIcon')     ? ''           :
-               hasAttrValue('mdFontIcon')    ? tmplFontIcon : tmplFontSet;
-
-    // If available, lookup the fontSet style and add to the list of classnames
-    // NOTE: Material Icons expects classnames like `.material-icons.md-48` instead of `.material-icons .md-48`
-
-    var names = (tmpl == tmplFontSet) ? $mdIcon.fontSet(attrValue('mdFontSet'))  + ' ' : '';
-        names = (names + attrValue('class')).trim();
-
-    return $interpolate( tmpl )({ classNames: names });
-  }
 
 
   /**
@@ -220,6 +226,7 @@ function mdIconDirective($mdIcon, $mdTheming, $mdAria, $interpolate ) {
 
       });
     }
+
     function parentsHaveText() {
       var parent = element.parent();
       if (parent.attr('aria-label') || parent.text()) {
