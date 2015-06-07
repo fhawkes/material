@@ -161,7 +161,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $timeout, $
   //-- event/change handlers
 
   function selectedItemChange (selectedItem, previousSelectedItem) {
-    if (selectedItem) {
+    if (selectedItem && $scope.searchText !== null) {
       $scope.searchText = ($scope.searchText === "" ? "" : getDisplayValue(selectedItem));
     }
     if ($scope.itemChange && selectedItem !== previousSelectedItem)
