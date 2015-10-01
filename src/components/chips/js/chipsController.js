@@ -343,13 +343,14 @@ MdChipsCtrl.prototype.configureUserInput = function(inputElement) {
 };
 
 MdChipsCtrl.prototype.configureAutocomplete = function(ctrl) {
-
-  ctrl.registerSelectedItemWatcher(angular.bind(this, function (item) {
-    if (item) {
-      this.appendChip(item);
-      this.resetChipBuffer();
-    }
-  }));
+  if (ctrl) {
+    ctrl.registerSelectedItemWatcher(angular.bind(this, function (item) {
+      if (item) {
+        this.appendChip(item);
+        this.resetChipBuffer();
+      }
+    }));
+  }
 
   this.$element.find('input')
       .on('focus',angular.bind(this, this.onInputFocus) )
