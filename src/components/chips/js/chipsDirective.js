@@ -158,7 +158,7 @@
       bindToController: true,
       compile: compile,
       scope: {
-        readonly: '=readonly',
+        readonly: '=isReadonly',
         placeholder: '@',
         secondaryPlaceholder: '@',
         mdOnAppend: '&',
