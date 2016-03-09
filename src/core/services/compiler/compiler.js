@@ -1,4 +1,5 @@
-angular.module('material.core')
+angular
+  .module('material.core')
   .service('$mdCompiler', mdCompilerService);
 
 function mdCompilerService($q, $http, $injector, $compile, $controller, $templateCache) {
@@ -50,11 +51,11 @@ function mdCompilerService($q, $http, $injector, $compile, $controller, $templat
     *      * `key` - `{string}`: a name of a dependency to be injected into the controller.
     *      * `factory` - `{string|function}`: If `string` then it is an alias for a service.
     *        Otherwise if function, then it is injected and the return value is treated as the
-    *        dependency. If the result is a promise, it is resolved before its value is 
+    *        dependency. If the result is a promise, it is resolved before its value is
     *        injected into the controller.
     *
     * @returns {object=} promise A promise, which will be resolved with a `compileData` object.
-    * `compileData` has the following properties: 
+    * `compileData` has the following properties:
     *
     *   - `element` - `{element}`: an uncompiled element matching the provided template.
     *   - `link` - `{function(scope)}`: A link function, which, when called, will compile
@@ -68,12 +69,12 @@ function mdCompilerService($q, $http, $injector, $compile, $controller, $templat
     var template = options.template || '';
     var controller = options.controller;
     var controllerAs = options.controllerAs;
-    var resolve = options.resolve || {};
-    var locals = options.locals || {};
+    var resolve = angular.extend({}, options.resolve || {});
+    var locals = angular.extend({}, options.locals || {});
     var transformTemplate = options.transformTemplate || angular.identity;
     var bindToController = options.bindToController;
 
-    // Take resolve values and invoke them.  
+    // Take resolve values and invoke them.
     // Resolves can either be a string (value: 'MyRegisteredAngularConst'),
     // or an invokable 'factory' of sorts: (value: function ValueGetter($dependency) {})
     angular.forEach(resolve, function(value, key) {
@@ -99,12 +100,13 @@ function mdCompilerService($q, $http, $injector, $compile, $controller, $templat
     // Wait for all the resolves to finish if they are promises
     return $q.all(resolve).then(function(locals) {
 
-      var template = transformTemplate(locals.$template);
+      var compiledData;
+      var template = transformTemplate(locals.$template, options);
       var element = options.element || angular.element('<div>').html(template.trim()).contents();
       var linkFn = $compile(element);
 
-      //Return a linking function that can be used later when the element is ready
-      return {
+      // Return a linking function that can be used later when the element is ready
+      return compiledData = {
         locals: locals,
         element: element,
         link: function link(scope) {
@@ -124,6 +126,9 @@ function mdCompilerService($q, $http, $injector, $compile, $controller, $templat
             if (controllerAs) {
               scope[controllerAs] = ctrl;
             }
+
+            // Publish reference to this controller
+            compiledData.controller = ctrl;
           }
           return linkFn(scope);
         }

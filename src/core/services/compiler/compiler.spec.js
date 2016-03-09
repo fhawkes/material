@@ -15,12 +15,13 @@ describe('$mdCompiler service', function() {
   describe('setup', function() {
 
     it('element should use templateUrl', inject(function($templateCache) {
-      var tpl = 'hola';
+      var tpl = '<span>hola</span>';
       $templateCache.put('template.html', tpl);
       var data = compile({
         templateUrl: 'template.html'
       });
-      expect(data.element.html()).toBe(tpl);
+
+      expect(data.element.html()).toBe('hola');
     }));
 
     it('element should use template', function() {
@@ -28,7 +29,11 @@ describe('$mdCompiler service', function() {
       var data = compile({
         template: tpl
       });
-      expect(data.element.html()).toBe(tpl);
+
+      // .html() returns the “inner” HTML
+      // but  inner HTML of "hello" is `undefined`
+      // so use .text()
+      expect(data.element.text()).toBe(tpl);
     });
 
     it('should support a custom element', function() {
@@ -43,7 +48,7 @@ describe('$mdCompiler service', function() {
       var data = compile({
         template: tpl
       });
-      expect(data.element.html()).toBe('hello');
+      expect(data.element.text()).toBe('hello');
     });
 
     it('transformTemplate should work with template', function() {
@@ -51,37 +56,60 @@ describe('$mdCompiler service', function() {
         template: 'world',
         transformTemplate: function(tpl) { return 'hello ' + tpl; }
       });
-      expect(data.element.html()).toBe('hello world');
+      expect(data.element.text()).toBe('hello world');
     });
 
-    it('resolve and locals should work', function() {
-      module(function($provide) {
-        $provide.constant('StrawberryColor', 'red');
+    it('transformTemplate receives the options', function() {
+      var data = compile({
+        template: 'world',
+        someArg: 'foo',
+        transformTemplate: function(tpl, options) { return 'hello ' + tpl + ': ' + options.someArg; }
+      });
+      expect(data.element.text()).toBe('hello world: foo');
+    });
+
+    describe('with resolve and locals options', function() {
+      var options;
+
+      beforeEach(function() {
+        module(function($provide) {
+          $provide.constant('StrawberryColor', 'red');
+        });
+
+        options = {
+          resolve: {
+            //Resolve a factory inline
+            fruit: function($q) {
+              return $q.when('apple');
+            },
+            //Resolve a DI token's value
+            color: 'StrawberryColor'
+          },
+          locals: {
+            vegetable: 'carrot'
+          }
+        };
       });
 
-      var data = compile({
-        resolve: {
-          //Resolve a factory inline
-          fruit: function($q) {
-            return $q.when('apple');
-          },
-          //Resolve a DI token's value
-          color: 'StrawberryColor'
-        },
-        locals: {
-          vegetable: 'carrot'
-        }
+      it('should work', function() {
+        var data = compile(options);
+        expect(data.locals.fruit).toBe('apple');
+        expect(data.locals.vegetable).toBe('carrot');
+        expect(data.locals.color).toBe('red');
       });
-      expect(data.locals.fruit).toBe('apple');
-      expect(data.locals.vegetable).toBe('carrot');
-      expect(data.locals.color).toBe('red');
+
+      it('should not overwrite the original values', function() {
+        var clone = angular.copy(options);
+        compile(options);
+        expect(options).toEqual(clone);
+      });
     });
 
     describe('after link()', function() {
 
       it('should compile with scope', inject(function($rootScope) {
         var data = compile({
-          template: 'hello'
+          template: '<span>hello</span>'
         });
         var scope = $rootScope.$new();
         data.link(scope);
@@ -90,7 +118,7 @@ describe('$mdCompiler service', function() {
 
       it('should compile with controller & locals', inject(function($rootScope) {
         var data = compile({
-          template: 'hello',
+          template: '<span>hello</span>',
           locals: {
             one: 1
           },
@@ -106,7 +134,7 @@ describe('$mdCompiler service', function() {
 
       it('should compile with controllerAs', inject(function($rootScope) {
         var data = compile({
-          template: 'hello',
+          template: '<span>hello</span>',
           controller: function Ctrl() {},
           controllerAs: 'myControllerAs'
         });

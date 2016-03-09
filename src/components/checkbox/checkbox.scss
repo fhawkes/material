@@ -1,33 +1,38 @@
-$checkbox-width: 18px !default;
+$checkbox-width: 20px !default;
 $checkbox-height: $checkbox-width !default;
-$checkbox-margin: 8px !default;
+$checkbox-margin: 16px !default;
 $checkbox-border-radius: 2px !default;
 $checkbox-border-width: 2px !default;
 $checkbox-text-margin: 10px !default;
+$checkbox-top: 12px !default;
+
+.md-inline-form {
+  md-checkbox {
+    margin: 19px 0 18px;
+  }
+}
 
 md-checkbox {
   box-sizing: border-box;
-  display: block;
-  margin: $checkbox-margin;
+  display: inline-block;
+  margin-bottom: $checkbox-margin;
   white-space: nowrap;
   cursor: pointer;
   outline: none;
   user-select: none;
-  @include rtl(padding-left, $checkbox-width, 0);
-  @include rtl(padding-right, 0, $checkbox-width);
   position: relative;
-  line-height: $checkbox-width + $checkbox-margin;
   min-width: $checkbox-width;
   min-height: $checkbox-width;
+  @include rtl(margin-left, 0, $checkbox-margin);
+  @include rtl(margin-right, $checkbox-margin, 0);
 
-  *,
-  *:before,
-  *:after {
-    box-sizing: border-box;
+  &:last-of-type {
+    margin-left: 0;
+    margin-right: 0;
   }
 
   &.md-focused:not([disabled]) {
-    .md-container:before {
+    ._md-container:before {
       left: -8px;
       top: -8px;
       right: -8px;
@@ -35,23 +40,31 @@ md-checkbox {
     }
 
     &:not(.md-checked) {
-      .md-container:before {
+      ._md-container:before {
         background-color: rgba(0, 0, 0, 0.12);
       }
     }
   }
 
-  .md-container {
+  ._md-container {
     position: absolute;
     top: 50%;
+    transform: translateY(-50%);
+
+    box-sizing: border-box;
     display: inline-block;
+
     width: $checkbox-width;
     height: $checkbox-height;
-    transform: translateY(-50%);
     @include rtl(left, 0, auto);
     @include rtl(right, auto, 0);
 
+    // Disable pointer events, because IE11 is always focusing the child elements instead of the
+    // md-checkbox element.
+    pointer-events: none;
+    
     &:before {
+      box-sizing: border-box;
       background-color: transparent;
       border-radius: 50%;
       content: '';
@@ -67,6 +80,7 @@ md-checkbox {
     }
 
     &:after {
+      box-sizing: border-box;
       content: '';
       position: absolute;
       top: -10px;
@@ -87,8 +101,13 @@ md-checkbox {
     }
   }
 
+  &.md-align-top-left > div._md-container {
+    top: $checkbox-top;
+  }
+
   // unchecked
-  .md-icon {
+  ._md-icon {
+    box-sizing: border-box;
     transition: 240ms;
     position: absolute;
     top: 0;
@@ -100,17 +119,18 @@ md-checkbox {
     border-radius: $checkbox-border-radius;
   }
 
-  &.md-checked .md-icon {
+  &.md-checked ._md-icon {
     border: none;
   }
 
   // disabled
   &[disabled] {
-    cursor: no-drop;
+    cursor: default;
   }
 
 
-  &.md-checked .md-icon:after {
+  &.md-checked ._md-icon:after {
+    box-sizing: border-box;
     transform: rotate(45deg);
     position: absolute;
     left: $checkbox-width / 3;
@@ -125,17 +145,16 @@ md-checkbox {
     content: '';
   }
 
-  .md-label {
+  ._md-label {
+    box-sizing: border-box;
     position: relative;
     display: inline-block;
     vertical-align: middle;
     white-space: normal;
-    pointer-events: none;
     user-select: text;
 
-    span {
-      @include rtl(margin-left, $checkbox-text-margin, 0);
-      @include rtl(margin-right, 0, $checkbox-text-margin);
-    }
+    @include rtl(margin-left, $checkbox-text-margin + $checkbox-width, 0);
+    @include rtl(margin-right, 0, $checkbox-text-margin + $checkbox-width);
+
   }
 }

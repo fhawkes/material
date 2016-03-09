@@ -6,18 +6,75 @@
  */
 var nextUniqueId = 0;
 
-angular.module('material.core')
-.factory('$mdUtil', function($cacheFactory, $document, $timeout, $q, $window, $mdConstant) {
-  var Util;
+/**
+ * @ngdoc module
+ * @name material.core.util
+ * @description
+ * Util
+ */
+angular
+  .module('material.core')
+  .factory('$mdUtil', UtilFactory);
 
-  function getNode(el) {
-    return el[0] || el;
-  }
+function UtilFactory($document, $timeout, $compile, $rootScope, $$mdAnimate, $interpolate, $log, $rootElement, $window) {
+  // Setup some core variables for the processTemplate method
+  var startSymbol = $interpolate.startSymbol(),
+    endSymbol = $interpolate.endSymbol(),
+    usesStandardSymbols = ((startSymbol === '{{') && (endSymbol === '}}'));
 
-  return Util = {
+  /**
+   * Checks if the target element has the requested style by key
+   * @param {DOMElement|JQLite} target Target element
+   * @param {string} key Style key
+   * @param {string=} expectedVal Optional expected value
+   * @returns {boolean} Whether the target element has the style or not
+   */
+  var hasComputedStyle = function (target, key, expectedVal) {
+    var hasValue = false;
+
+    if ( target && target.length  ) {
+      var computedStyles = $window.getComputedStyle(target[0]);
+      hasValue = angular.isDefined(computedStyles[key]) && (expectedVal ? computedStyles[key] == expectedVal : true);
+    }
+
+    return hasValue;
+  };
+
+  var $mdUtil = {
+    dom: {},
     now: window.performance ?
-      angular.bind(window.performance, window.performance.now) :
-      Date.now,
+      angular.bind(window.performance, window.performance.now) : Date.now || function() {
+      return new Date().getTime();
+    },
+
+    /**
+     * Bi-directional accessor/mutator used to easily update an element's
+     * property based on the current 'dir'ectional value.
+     */
+    bidi : function(element, property, lValue, rValue) {
+      var ltr = !($document[0].dir == 'rtl' || $document[0].body.dir == 'rtl');
+
+      // If accessor
+      if ( arguments.length == 0 ) return ltr ? 'ltr' : 'rtl';
+
+      // If mutator
+      if ( ltr && angular.isDefined(lValue)) {
+        angular.element(element).css(property, validate(lValue));
+      }
+      else if ( !ltr && angular.isDefined(rValue)) {
+        angular.element(element).css(property, validate(rValue) );
+      }
+
+        // Internal utils
+
+        function validate(value) {
+          return !value       ? '0'   :
+                 hasPx(value) ? value : value + 'px';
+        }
+        function hasPx(value) {
+          return String(value).indexOf('px') > -1;
+        }
+    },
 
     clientRect: function(element, offsetParent, isOffsetRect) {
       var node = getNode(element);
@@ -28,7 +85,7 @@ angular.module('material.core')
       // or a clientRect: a rect relative to the page
       var offsetRect = isOffsetRect ?
         offsetParent.getBoundingClientRect() :
-        { left: 0, top: 0, width: 0, height: 0 };
+      {left: 0, top: 0, width: 0, height: 0};
       return {
         left: nodeRect.left - offsetRect.left,
         top: nodeRect.top - offsetRect.top,
@@ -37,50 +94,109 @@ angular.module('material.core')
       };
     },
     offsetRect: function(element, offsetParent) {
-      return Util.clientRect(element, offsetParent, true);
+      return $mdUtil.clientRect(element, offsetParent, true);
     },
-    // Disables scroll around the passed element. Goes up the DOM to find a
-    // disableTarget (a md-content that is scrolling, or the body as a fallback)
-    // and uses CSS/JS to prevent it from scrolling
-    disableScrollAround: function(element) {
-      element = element instanceof angular.element ? element[0] : element;
-      var parentEl = element;
-      var disableTarget;
 
-      // Find the highest level scrolling md-content
-      while (parentEl = this.getClosest(parentEl, 'MD-CONTENT', true)) {
-        if (isScrolling(parentEl)) {
-          disableTarget = angular.element(parentEl)[0];
+    // Annoying method to copy nodes to an array, thanks to IE
+    nodesToArray: function(nodes) {
+      nodes = nodes || [];
+
+      var results = [];
+      for (var i = 0; i < nodes.length; ++i) {
+        results.push(nodes.item(i));
+      }
+      return results;
+    },
+
+    /**
+     * Calculate the positive scroll offset
+     * TODO: Check with pinch-zoom in IE/Chrome;
+     *       https://code.google.com/p/chromium/issues/detail?id=496285
+     */
+    scrollTop: function(element) {
+      element = angular.element(element || $document[0].body);
+
+      var body = (element[0] == $document[0].body) ? $document[0].body : undefined;
+      var scrollTop = body ? body.scrollTop + body.parentElement.scrollTop : 0;
+
+      // Calculate the positive scroll offset
+      return scrollTop || Math.abs(element[0].getBoundingClientRect().top);
+    },
+
+    /**
+     * Finds the proper focus target by searching the DOM.
+     *
+     * @param containerEl
+     * @param attributeVal
+     * @returns {*}
+     */
+    findFocusTarget: function(containerEl, attributeVal) {
+      var AUTO_FOCUS = '[md-autofocus]';
+      var elToFocus;
+
+      elToFocus = scanForFocusable(containerEl, attributeVal || AUTO_FOCUS);
+
+      if ( !elToFocus && attributeVal != AUTO_FOCUS) {
+        // Scan for deprecated attribute
+        elToFocus = scanForFocusable(containerEl, '[md-auto-focus]');
+
+        if ( !elToFocus ) {
+          // Scan for fallback to 'universal' API
+          elToFocus = scanForFocusable(containerEl, AUTO_FOCUS);
         }
       }
 
-      // Default to the body if no scrolling md-content
-      if (!disableTarget) {
-        disableTarget = $document[0].body;
-        if (!isScrolling(disableTarget)) return angular.noop;
-      }
+      return elToFocus;
 
-      if (disableTarget.nodeName == 'BODY') {
-        return disableBodyScroll();
-      } else {
-        return disableElementScroll();
+      /**
+       * Can target and nested children for specified Selector (attribute)
+       * whose value may be an expression that evaluates to True/False.
+       */
+      function scanForFocusable(target, selector) {
+        var elFound, items = target[0].querySelectorAll(selector);
+
+        // Find the last child element with the focus attribute
+        if ( items && items.length ){
+          items.length && angular.forEach(items, function(it) {
+            it = angular.element(it);
+
+            // Check the element for the _md-autofocus class to ensure any associated expression
+            // evaluated to true.
+            var isFocusable = it.hasClass('_md-autofocus');
+            if (isFocusable) elFound = it;
+          });
+        }
+        return elFound;
       }
+    },
+
+    // Disables scroll around the passed element.
+    disableScrollAround: function(element, parent) {
+      $mdUtil.disableScrollAround._count = $mdUtil.disableScrollAround._count || 0;
+      ++$mdUtil.disableScrollAround._count;
+      if ($mdUtil.disableScrollAround._enableScrolling) return $mdUtil.disableScrollAround._enableScrolling;
+      element = angular.element(element);
+      var body = $document[0].body,
+        restoreBody = disableBodyScroll(),
+        restoreElement = disableElementScroll(parent);
+
+      return $mdUtil.disableScrollAround._enableScrolling = function() {
+        if (!--$mdUtil.disableScrollAround._count) {
+          restoreBody();
+          restoreElement();
+          delete $mdUtil.disableScrollAround._enableScrolling;
+        }
+      };
 
       // Creates a virtual scrolling mask to absorb touchmove, keyboard, scrollbar clicking, and wheel events
-      function disableElementScroll() {
-        var scrollMask = angular.element('<div class="md-scroll-mask"><div class="md-scroll-mask-bar"></div></div>');
-        var computedStyle = $window.getComputedStyle(disableTarget);
-        var disableRect = disableTarget.getBoundingClientRect();
-        var scrollWidth = disableRect.width - disableTarget.clientWidth;
-        applyStyles(scrollMask[0], {
-          zIndex: computedStyle.zIndex == 'auto' ? 2 : computedStyle.zIndex + 1,
-          width: disableRect.width + 'px',
-          height: disableRect.height + 'px',
-          top: disableRect.top + 'px',
-          left: disableRect.left + 'px'
-        });
-        scrollMask[0].firstElementChild.style.width = scrollWidth + 'px';
-        $document[0].body.appendChild(scrollMask[0]);
+      function disableElementScroll(element) {
+        element = angular.element(element || body)[0];
+        var zIndex = 50;
+        var scrollMask = angular.element(
+          '<div class="md-scroll-mask">' +
+          '  <div class="md-scroll-mask-bar"></div>' +
+          '</div>').css('z-index', zIndex);
+        element.appendChild(scrollMask[0]);
 
         scrollMask.on('wheel', preventDefault);
         scrollMask.on('touchmove', preventDefault);
@@ -91,16 +207,18 @@ angular.module('material.core')
           scrollMask.off('touchmove');
           scrollMask[0].parentNode.removeChild(scrollMask[0]);
           $document.off('keydown', disableKeyNav);
+          delete $mdUtil.disableScrollAround._enableScrolling;
         };
 
-        // Prevent keypresses from elements inside the disableTarget
+        // Prevent keypresses from elements inside the body
         // used to stop the keypresses that could cause the page to scroll
         // (arrow keys, spacebar, tab, etc).
         function disableKeyNav(e) {
-          if (disableTarget.contains(e.target)) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-          }
+          //-- temporarily removed this logic, will possibly re-add at a later date
+          //if (!element[0].contains(e.target)) {
+          //  e.preventDefault();
+          //  e.stopImmediatePropagation();
+          //}
         }
 
         function preventDefault(e) {
@@ -108,39 +226,58 @@ angular.module('material.core')
         }
       }
 
-      // Converts the disableTarget (body) to a position fixed block and translate it to the propper scroll position
+      // Converts the body to a position fixed block and translate it to the proper scroll
+      // position
       function disableBodyScroll() {
-        var restoreStyle = disableTarget.getAttribute('style') || '';
-        var scrollOffset = disableTarget.scrollTop;
+        var htmlNode = body.parentNode;
+        var restoreHtmlStyle = htmlNode.style.cssText || '';
+        var restoreBodyStyle = body.style.cssText || '';
+        var scrollOffset = $mdUtil.scrollTop(body);
+        var clientWidth = body.clientWidth;
 
-        applyStyles(disableTarget, {
-          position: 'fixed',
-          width: '100%',
-          overflowY: 'scroll',
-          top: -scrollOffset + 'px'
-        });
+        if (body.scrollHeight > body.clientHeight + 1) {
+          applyStyles(body, {
+            position: 'fixed',
+            width: '100%',
+            top: -scrollOffset + 'px'
+          });
+
+          applyStyles(htmlNode, {
+            overflowY: 'scroll'
+          });
+        }
+
+        if (body.clientWidth < clientWidth) applyStyles(body, {overflow: 'hidden'});
 
         return function restoreScroll() {
-          disableTarget.setAttribute('style', restoreStyle);
-          disableTarget.scrollTop = scrollOffset;
+          body.style.cssText = restoreBodyStyle;
+          htmlNode.style.cssText = restoreHtmlStyle;
+          body.scrollTop = scrollOffset;
+          htmlNode.scrollTop = scrollOffset;
         };
       }
 
-      function applyStyles (el, styles) {
+      function applyStyles(el, styles) {
         for (var key in styles) {
           el.style[key] = styles[key];
         }
       }
-
-      function isScrolling(el) {
-        if (el instanceof angular.element) el = el[0];
-        return el.scrollHeight > el.offsetHeight;
-      }
     },
-
+    enableScrolling: function() {
+      var method = this.disableScrollAround._enableScrolling;
+      method && method();
+    },
     floatingScrollbars: function() {
       if (this.floatingScrollbars.cached === undefined) {
-        var tempNode = angular.element('<div style="width: 100%; z-index: -1; position: absolute; height: 35px; overflow-y: scroll"><div style="height: 60;"></div></div>');
+        var tempNode = angular.element('<div><div></div></div>').css({
+          width: '100%',
+          'z-index': -1,
+          position: 'absolute',
+          height: '35px',
+          'overflow-y': 'scroll'
+        });
+        tempNode.children().css('height', '60px');
+
         $document[0].body.appendChild(tempNode[0]);
         this.floatingScrollbars.cached = (tempNode[0].offsetWidth == tempNode[0].childNodes[0].offsetWidth);
         tempNode.remove();
@@ -163,25 +300,42 @@ angular.module('material.core')
 
       var newEvent = document.createEvent('MouseEvents');
       newEvent.initMouseEvent('click', false, true, window, {}, 0, 0, 0, 0,
-                       false, false, false, false, 0, null);
+        false, false, false, false, 0, null);
       newEvent.$material = true;
       newEvent.$focus = true;
       node.dispatchEvent(newEvent);
     },
 
-    transitionEndPromise: function(element, opts) {
-      opts = opts || {};
-      var deferred = $q.defer();
-      element.on($mdConstant.CSS.TRANSITIONEND, finished);
-      function finished(ev) {
-        // Make sure this transitionend didn't bubble up from a child
-        if (!ev || ev.target === element[0]) {
-          element.off($mdConstant.CSS.TRANSITIONEND, finished);
-          deferred.resolve();
+    /**
+     * facade to build md-backdrop element with desired styles
+     * NOTE: Use $compile to trigger backdrop postLink function
+     */
+    createBackdrop: function(scope, addClass) {
+      return $compile($mdUtil.supplant('<md-backdrop class="{0}">', [addClass]))(scope);
+    },
+
+    /**
+     * supplant() method from Crockford's `Remedial Javascript`
+     * Equivalent to use of $interpolate; without dependency on
+     * interpolation symbols and scope. Note: the '{<token>}' can
+     * be property names, property chains, or array indices.
+     */
+    supplant: function(template, values, pattern) {
+      pattern = pattern || /\{([^\{\}]*)\}/g;
+      return template.replace(pattern, function(a, b) {
+        var p = b.split('.'),
+          r = values;
+        try {
+          for (var s in p) {
+            if (p.hasOwnProperty(s) ) {
+              r = r[p[s]];
+            }
+          }
+        } catch (e) {
+          r = a;
         }
-      }
-      if (opts.timeout) $timeout(finished, opts.timeout);
-      return deferred.promise;
+        return (typeof r === 'string' || typeof r === 'number') ? r : a;
+      });
     },
 
     fakeNgModel: function() {
@@ -191,7 +345,9 @@ angular.module('material.core')
         $setViewValue: function(value) {
           this.$viewValue = value;
           this.$render(value);
-          this.$viewChangeListeners.forEach(function(cb) { cb(); });
+          this.$viewChangeListeners.forEach(function(cb) {
+            cb();
+          });
         },
         $isEmpty: function(value) {
           return ('' + value).length === 0;
@@ -208,7 +364,7 @@ angular.module('material.core')
     // N milliseconds.
     // @param wait Integer value of msecs to delay (since last debounce reset); default value 10 msecs
     // @param invokeApply should the $timeout trigger $digest() dirty checking
-    debounce: function (func, wait, scope, invokeApply) {
+    debounce: function(func, wait, scope, invokeApply) {
       var timer;
 
       return function debounced() {
@@ -221,7 +377,7 @@ angular.module('material.core')
           timer = undefined;
           func.apply(context, args);
 
-        }, wait || 10, invokeApply );
+        }, wait || 10, invokeApply);
       };
     },
 
@@ -233,7 +389,7 @@ angular.module('material.core')
       return function throttled() {
         var context = this;
         var args = arguments;
-        var now = Util.now();
+        var now = $mdUtil.now();
 
         if (!recent || (now - recent > delay)) {
           func.apply(context, args);
@@ -247,9 +403,25 @@ angular.module('material.core')
      * function. Uses a high-precision timer if available.
      */
     time: function time(cb) {
-      var start = Util.now();
+      var start = $mdUtil.now();
       cb();
-      return Util.now() - start;
+      return $mdUtil.now() - start;
+    },
+
+    /**
+     * Create an implicit getter that caches its `getter()`
+     * lookup value
+     */
+    valueOnUse : function (scope, key, getter) {
+      var value = null, args = Array.prototype.slice.call(arguments);
+      var params = (args.length > 3) ? args.slice(3) : [ ];
+
+      Object.defineProperty(scope, key, {
+        get: function () {
+          if (value === null) value = getter.apply(scope, params);
+          return value;
+        }
+      });
     },
 
     /**
@@ -268,7 +440,7 @@ angular.module('material.core')
 
       // we can't destroy the root scope or a scope that has been already destroyed
       if (scope.$root === scope) return;
-      if (scope.$$destroyed ) return;
+      if (scope.$$destroyed) return;
 
       var parent = scope.$parent;
       scope.$$disconnected = true;
@@ -310,6 +482,7 @@ angular.module('material.core')
      *
      * @param el Element to start walking the DOM from
      * @param tagName Tag name to find closest to el, such as 'form'
+     * @param onlyParent Only start checking from the parent element, not `el`.
      */
     getClosest: function getClosest(el, tagName, onlyParent) {
       if (el instanceof angular.element) el = el[0];
@@ -325,53 +498,222 @@ angular.module('material.core')
     },
 
     /**
-     * Functional equivalent for $element.filter(‘md-bottom-sheet’)
-     * useful with interimElements where the element and its container are important...
+     * Build polyfill for the Node.contains feature (if needed)
      */
-    extractElementByName: function (element, nodeName) {
-      for (var i = 0, len = element.length; i < len; i++) {
-        if (element[i].nodeName.toLowerCase() === nodeName){
-          return angular.element(element[i]);
-        }
-      }
-      return element;
+    elementContains: function(node, child) {
+      var hasContains = (window.Node && window.Node.prototype && Node.prototype.contains);
+      var findFn = hasContains ? angular.bind(node, node.contains) : angular.bind(node, function(arg) {
+        // compares the positions of two nodes and returns a bitmask
+        return (node === child) || !!(this.compareDocumentPosition(arg) & 16)
+      });
+
+      return findFn(child);
     },
 
     /**
-     * Give optional properties with no value a boolean true by default
+     * Functional equivalent for $element.filter(‘md-bottom-sheet’)
+     * useful with interimElements where the element and its container are important...
+     *
+     * @param {[]} elements to scan
+     * @param {string} name of node to find (e.g. 'md-dialog')
+     * @param {boolean=} optional flag to allow deep scans; defaults to 'false'.
+     * @param {boolean=} optional flag to enable log warnings; defaults to false
      */
-    initOptionalProperties: function (scope, attr, defaults ) {
-       defaults = defaults || { };
-       angular.forEach(scope.$$isolateBindings, function (binding, key) {
-         if (binding.optional && angular.isUndefined(scope[key])) {
-           var hasKey = attr.hasOwnProperty(attr.$normalize(binding.attrName));
+    extractElementByName: function(element, nodeName, scanDeep, warnNotFound) {
+      var found = scanTree(element);
+      if (!found && !!warnNotFound) {
+        $log.warn( $mdUtil.supplant("Unable to find node '{0}' in element '{1}'.",[nodeName, element[0].outerHTML]) );
+      }
 
-           scope[key] = angular.isDefined(defaults[key]) ? defaults[key] : hasKey;
-         }
-       });
-    }
+      return angular.element(found || element);
 
+      /**
+       * Breadth-First tree scan for element with matching `nodeName`
+       */
+      function scanTree(element) {
+        return scanLevel(element) || (!!scanDeep ? scanChildren(element) : null);
+      }
+
+      /**
+       * Case-insensitive scan of current elements only (do not descend).
+       */
+      function scanLevel(element) {
+        if ( element ) {
+          for (var i = 0, len = element.length; i < len; i++) {
+            if (element[i].nodeName.toLowerCase() === nodeName) {
+              return element[i];
+            }
+          }
+        }
+        return null;
+      }
+
+      /**
+       * Scan children of specified node
+       */
+      function scanChildren(element) {
+        var found;
+        if ( element ) {
+          for (var i = 0, len = element.length; i < len; i++) {
+            var target = element[i];
+            if ( !found ) {
+              for (var j = 0, numChild = target.childNodes.length; j < numChild; j++) {
+                found = found || scanTree([target.childNodes[j]]);
+              }
+            }
+          }
+        }
+        return found;
+      }
+
+    },
+
+    /**
+     * Give optional properties with no value a boolean true if attr provided or false otherwise
+     */
+    initOptionalProperties: function(scope, attr, defaults) {
+      defaults = defaults || {};
+      angular.forEach(scope.$$isolateBindings, function(binding, key) {
+        if (binding.optional && angular.isUndefined(scope[key])) {
+          var attrIsDefined = angular.isDefined(attr[binding.attrName]);
+          scope[key] = angular.isDefined(defaults[key]) ? defaults[key] : attrIsDefined;
+        }
+      });
+    },
+
+    /**
+     * Alternative to $timeout calls with 0 delay.
+     * nextTick() coalesces all calls within a single frame
+     * to minimize $digest thrashing
+     *
+     * @param callback
+     * @param digest
+     * @returns {*}
+     */
+    nextTick: function(callback, digest, scope) {
+      //-- grab function reference for storing state details
+      var nextTick = $mdUtil.nextTick;
+      var timeout = nextTick.timeout;
+      var queue = nextTick.queue || [];
+
+      //-- add callback to the queue
+      queue.push(callback);
+
+      //-- set default value for digest
+      if (digest == null) digest = true;
+
+      //-- store updated digest/queue values
+      nextTick.digest = nextTick.digest || digest;
+      nextTick.queue = queue;
+
+      //-- either return existing timeout or create a new one
+      return timeout || (nextTick.timeout = $timeout(processQueue, 0, false));
+
+      /**
+       * Grab a copy of the current queue
+       * Clear the queue for future use
+       * Process the existing queue
+       * Trigger digest if necessary
+       */
+      function processQueue() {
+        var skip = scope && scope.$$destroyed;
+        var queue = !skip ? nextTick.queue : [];
+        var digest = !skip ? nextTick.digest : null;
+
+        nextTick.queue = [];
+        nextTick.timeout = null;
+        nextTick.digest = false;
+
+        queue.forEach(function(callback) {
+          callback();
+        });
+
+        if (digest) $rootScope.$digest();
+      }
+    },
+
+    /**
+     * Processes a template and replaces the start/end symbols if the application has
+     * overriden them.
+     *
+     * @param template The template to process whose start/end tags may be replaced.
+     * @returns {*}
+     */
+    processTemplate: function(template) {
+      if (usesStandardSymbols) {
+        return template;
+      } else {
+        if (!template || !angular.isString(template)) return template;
+        return template.replace(/\{\{/g, startSymbol).replace(/}}/g, endSymbol);
+      }
+    },
+
+    /**
+     * Scan up dom hierarchy for enabled parent;
+     */
+    getParentWithPointerEvents: function (element) {
+      var parent = element.parent();
+
+      // jqLite might return a non-null, but still empty, parent; so check for parent and length
+      while (hasComputedStyle(parent, 'pointer-events', 'none')) {
+        parent = parent.parent();
+      }
+
+      return parent;
+    },
+
+    getNearestContentElement: function (element) {
+      var current = element.parent()[0];
+      // Look for the nearest parent md-content, stopping at the rootElement.
+      while (current && current !== $rootElement[0] && current !== document.body && current.nodeName.toUpperCase() !== 'MD-CONTENT') {
+        current = current.parentNode;
+      }
+      return current;
+    },
+
+    /**
+     * Parses an attribute value, mostly a string.
+     * By default checks for negated values and returns `false´ if present.
+     * Negated values are: (native falsy) and negative strings like:
+     * `false` or `0`.
+     * @param value Attribute value which should be parsed.
+     * @param negatedCheck When set to false, won't check for negated values.
+     * @returns {boolean}
+     */
+    parseAttributeBoolean: function(value, negatedCheck) {
+      return value === '' || !!value && (negatedCheck === false || value !== 'false' && value !== '0');
+    },
+
+    hasComputedStyle: hasComputedStyle
   };
 
-});
+// Instantiate other namespace utility methods
+
+  $mdUtil.dom.animator = $$mdAnimate($mdUtil);
+
+  return $mdUtil;
+
+  function getNode(el) {
+    return el[0] || el;
+  }
+
+}
 
 /*
  * Since removing jQuery from the demos, some code that uses `element.focus()` is broken.
- *
  * We need to add `element.focus()`, because it's testable unlike `element[0].focus`.
- *
- * TODO(ajoslin): This should be added in a better place later.
  */
 
 angular.element.prototype.focus = angular.element.prototype.focus || function() {
-  if (this.length) {
-    this[0].focus();
-  }
-  return this;
-};
+    if (this.length) {
+      this[0].focus();
+    }
+    return this;
+  };
 angular.element.prototype.blur = angular.element.prototype.blur || function() {
-  if (this.length) {
-    this[0].blur();
-  }
-  return this;
-};
+    if (this.length) {
+      this[0].blur();
+    }
+    return this;
+  };
+

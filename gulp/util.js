@@ -38,7 +38,7 @@ exports.args = args;
  * Builds the entire component library javascript.
  * @param {boolean} isRelease Whether to build in release mode.
  */
-function buildJs (isRelease) {
+function buildJs () {
   var jsFiles = config.jsBaseFiles.concat([path.join(config.paths, '*.js')]);
 
   gutil.log("building js files...");
@@ -54,6 +54,7 @@ function buildJs (isRelease) {
       .pipe(concat('angular-material.js'))
       .pipe(BUILD_MODE.transform())
       .pipe(insert.prepend(config.banner))
+      .pipe(insert.append(';window.ngMaterial={version:{full: "' + VERSION +'"}};'))
       .pipe(gulp.dest(config.outputDir))
       .pipe(gulpif(!IS_DEV, uglify({ preserveComments: 'some' })))
       .pipe(rename({ extname: '.min.js' }))
@@ -74,11 +75,12 @@ function autoprefix () {
   ]});
 }
 
-function buildModule(module, isRelease) {
+function buildModule(module, opts) {
+  opts = opts || {};
   if ( module.indexOf(".") < 0) {
     module = "material.components." + module;
   }
-  gutil.log('Building ' + module + (isRelease && ' minified' || '') + ' ...');
+  gutil.log('Building ' + module + (opts.isRelease && ' minified' || '') + ' ...');
 
   var name = module.split('.').pop();
   utils.copyDemoAssets(name, 'src/components/', 'dist/demos/');
@@ -93,7 +95,8 @@ function buildModule(module, isRelease) {
   return stream
       .pipe(BUILD_MODE.transform())
       .pipe(insert.prepend(config.banner))
-      .pipe(gulpif(isRelease, buildMin()))
+      .pipe(gulpif(opts.minify, buildMin()))
+      .pipe(gulpif(opts.useBower, buildBower()))
       .pipe(gulp.dest(BUILD_MODE.outputDir + name));
 
   function splitStream (stream) {
@@ -119,8 +122,12 @@ function buildModule(module, isRelease) {
               .replace(/.js$/, '.min.js')
               .replace(/.css$/, '.min.css');
         })
-        .pipe(utils.buildModuleBower, name, VERSION)
     ();
+  }
+
+  function buildBower() {
+    return lazypipe()
+      .pipe(utils.buildModuleBower, name, VERSION)();
   }
 
   function buildModuleJs(name) {
@@ -173,7 +180,7 @@ function readModuleArg() {
 
 function filterNonCodeFiles() {
   return filter(function(file) {
-    return !/demo|module\.json|\.spec.js|README/.test(file.path);
+    return !/demo|module\.json|script\.js|\.spec.js|README/.test(file.path);
   });
 }
 

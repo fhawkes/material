@@ -39,10 +39,25 @@
 {% endmacro -%}
 
 {%- macro paramTable(params) %}
-<table class="no-style">
+<table class="md-api-table">
   <thead>
     <tr>
       <th>Parameter</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+  {$ paramList(params) $}
+  </tbody>
+</table>
+{% endmacro -%}
+
+{%- macro propertyTable(params) %}
+<table class="md-api-table">
+  <thead>
+    <tr>
+      <th>Property</th>
       <th>Type</th>
       <th>Description</th>
     </tr>
@@ -82,7 +97,7 @@
 {% endmacro -%}
 
 {%- macro returnTable(fn) -%}
-<table class="no-style">
+<table class="md-api-table">
   <thead>
   <tr>
     <th>Returns</th>

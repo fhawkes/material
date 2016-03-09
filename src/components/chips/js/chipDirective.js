@@ -22,7 +22,7 @@ angular
 // This hint text is hidden within a chip but used by screen readers to
 // inform the user how they can interact with a chip.
 var DELETE_HINT_TEMPLATE = '\
-    <span ng-if="!$mdChipsCtrl.readonly" class="md-visually-hidden">\
+    <span ng-if="!$mdChipsCtrl.readonly" class="_md-visually-hidden">\
       {{$mdChipsCtrl.deleteHint}}\
     </span>';
 
@@ -33,7 +33,9 @@ var DELETE_HINT_TEMPLATE = '\
  * @param $mdInkRipple
  * @ngInject
  */
-function MdChip($mdTheming) {
+function MdChip($mdTheming, $mdUtil) {
+  var hintTemplate = $mdUtil.processTemplate(DELETE_HINT_TEMPLATE);
+
   return {
     restrict: 'E',
     require: '^?mdChips',
@@ -41,12 +43,13 @@ function MdChip($mdTheming) {
   };
 
   function compile(element, attr) {
-    element.append(DELETE_HINT_TEMPLATE);
+    // Append the delete template
+    element.append($mdUtil.processTemplate(hintTemplate));
+
     return function postLink(scope, element, attr, ctrl) {
-      element.addClass('md-chip');
       $mdTheming(element);
 
-      if (ctrl) angular.element(element[0].querySelector('.md-chip-content'))
+      if (ctrl) angular.element(element[0].querySelector('._md-chip-content'))
           .on('blur', function () {
             ctrl.selectedChip = -1;
           });

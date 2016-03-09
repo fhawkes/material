@@ -1,7 +1,18 @@
+// Standard/Desktop Heights
 $toolbar-tools-height: 64px !default;
 $toolbar-height: 64px !default;
 $toolbar-medium-tall-height: 88px !default;
 $toolbar-tall-height: 128px !default;
+
+// Mobile portrait heights
+$toolbar-tools-height-mobile-portrait: 56px !default;
+$toolbar-height-mobile-portrait: 56px !default;
+
+// Mobile landscape heights
+$toolbar-tools-height-mobile-landscape: 48px !default;
+$toolbar-height-mobile-landscape: 48px !default;
+
+
 $toolbar-indent-margin: 64px !default;
 $toolbar-padding: 16px !default;
 
@@ -18,8 +29,16 @@ md-toolbar {
   font-size: rem(2.0);
   min-height: $baseline-grid * 8;
   width: 100%;
+
+  transition: $swift-ease-in-out;
+  transition-property: background-color, fill, color;
+
   &.md-whiteframe-z1-add, &.md-whiteframe-z1-remove {
     transition: box-shadow $swift-ease-in-out-duration linear;
+  }
+
+  md-toolbar-filler {
+    width: 9 * $baseline-grid;
   }
 
   *,
@@ -46,8 +65,8 @@ md-toolbar {
     }
   }
 
-  .md-indent {
-    margin-left: $toolbar-indent-margin;
+  > .md-indent {
+    @include rtl-prop(margin-left, margin-right, $toolbar-indent-margin);
   }
 
   ~ md-content {
@@ -64,7 +83,9 @@ md-toolbar {
 }
 
 .md-toolbar-tools {
-  @extend .md-title;
+  font-size: $title-font-size-base;
+  letter-spacing: 0.005em;
+  box-sizing: border-box;
   font-weight: 400;
   display: flex;
   align-items: center;
@@ -93,15 +114,52 @@ md-toolbar {
   .md-button {
     margin-top: 0;
     margin-bottom: 0;
+
+    &, &.md-icon-button md-icon {
+      transition: $swift-ease-in-out;
+      transition-property: background-color, fill, color;
+    }
   }
   &> .md-button:first-child {
-    margin-left: $icon-button-margin-offset;
+    @include rtl-prop(margin-left, margin-right, $icon-button-margin-offset);
   }
   &> .md-button:last-child {
-    margin-right: $icon-button-margin-offset;
+    @include rtl-prop(margin-right, margin-left, $icon-button-margin-offset);
+  }
+
+  &> md-menu:last-child {
+    @include rtl-prop(margin-right, margin-left, $icon-button-margin-offset);
+    & > .md-button {
+      @include rtl-prop(margin-right, margin-left, 0);
+    }
   }
 
   @media screen and (-ms-high-contrast: active) {
     border-bottom: 1px solid #fff;
   }
 }
+
+// Handle mobile portrait
+@media (min-width: 0) and (max-width: $layout-breakpoint-sm - 1) and (orientation: portrait) {
+  md-toolbar {
+    min-height: $toolbar-height-mobile-portrait;
+  }
+
+  .md-toolbar-tools {
+    height: $toolbar-height-mobile-portrait;
+    max-height: $toolbar-height-mobile-portrait;
+  }
+}
+
+// Handle mobile landscape
+@media (min-width: 0) and (max-width: $layout-breakpoint-sm - 1) and (orientation: landscape) {
+  md-toolbar {
+    min-height: $toolbar-height-mobile-landscape;
+  }
+
+  .md-toolbar-tools {
+    height: $toolbar-height-mobile-landscape;
+    max-height: $toolbar-height-mobile-landscape;
+  }
+}
+

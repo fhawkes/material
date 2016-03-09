@@ -2,26 +2,33 @@ angular
     .module('material.components.autocomplete')
     .controller('MdHighlightCtrl', MdHighlightCtrl);
 
-function MdHighlightCtrl ($scope, $element, $interpolate) {
+function MdHighlightCtrl ($scope, $element, $attrs) {
   this.init = init;
 
-  return init();
+  function init (termExpr, unsafeTextExpr) {
+    var text = null,
+        regex = null,
+        flags = $attrs.mdHighlightFlags || '',
+        watcher = $scope.$watch(function($scope) {
+          return {
+            term: termExpr($scope),
+            unsafeText: unsafeTextExpr($scope)
+          };
+        }, function (state, prevState) {
+          if (text === null || state.unsafeText !== prevState.unsafeText) {
+            text = angular.element('<div>').text(state.unsafeText).html()
+          }
+          if (regex === null || state.term !== prevState.term) {
+            regex = getRegExp(state.term, flags);
+          }
 
-  function init (term) {
-    var unsafeText = $interpolate($element.html())($scope),
-        text = angular.element('<div>').text(unsafeText).html(),
-        flags = $element.attr('md-highlight-flags') || '',
-        watcher = $scope.$watch(term, function (term) {
-          var regex = getRegExp(term, flags),
-              html = text.replace(regex, '<span class="highlight">$&</span>');
-          $element.html(html);
-        });
-    $element.on('$destroy', function () { watcher(); });
+          $element.html(text.replace(regex, '<span class="highlight">$&</span>'));
+        }, true);
+    $element.on('$destroy', watcher);
   }
 
   function sanitize (term) {
-    if (!term) return term;
-    return term.replace(/[\\\^\$\*\+\?\.\(\)\|\{\}\[\]]/g, '\\$&');
+    return term && term.replace(/[\\\^\$\*\+\?\.\(\)\|\{}\[\]]/g, '\\$&');
   }
 
   function getRegExp (text, flags) {
