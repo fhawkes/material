@@ -467,7 +467,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
    * @returns {*}
    */
   function getDisplayValue (item) {
-    return $q.when(getItemText(item) || item);
+    return $q.when(getItemText(item) || '');
 
     /**
      * Getter function to invoke user-defined expression (in the directive)
